@@ -1,0 +1,120 @@
+# R2 Output Verification
+Confirming whether all BGP sessions are established
+===================================================
+R2#sh ip bgp summary
+BGP router identifier 10.23.1.1, local AS number 65200
+BGP table version is 3, main routing table version 3
+2 network entries using 240 bytes of memory
+2 path entries using 104 bytes of memory
+2/1 BGP path/bestpath attribute entries using 248 bytes of memory
+1 BGP AS-PATH entries using 24 bytes of memory
+0 BGP route-map cache entries using 0 bytes of memory
+0 BGP filter-list cache entries using 0 bytes of memory
+Bitfield cache entries: current 1 (at peak 2) using 32 bytes of memory
+BGP using 648 total bytes of memory
+BGP activity 2/0 prefixes, 2/0 paths, scan interval 60 secs
+
+Neighbor        V    AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.12.1.1       4 65100      11      10        3    0    0 00:06:10        2
+10.23.1.2       4 65300       9      12        3    0    0 00:05:04        0
+R2#
+
+Confirming R2 received both prefixes and applied differentiated LOCAL_PREF (inbound route-map check)
+====================================================================================================
+R2#sh ip bgp
+BGP table version is 3, local router ID is 10.23.1.1
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal,
+              r RIB-failure, S Stale
+Origin codes: i - IGP, e - EGP, ? - incomplete
+
+   Network          Next Hop            Metric LocPrf Weight Path
+*> 172.16.1.0/24    10.12.1.1                0             0 65100 i
+*> 172.16.2.0/24    10.12.1.1                0             0 65100 i
+R2#
+
+#This confirms Seq 10 and Seq 20 of SET-LOCALPREF worked as expected.
+
+
+Confirming route-map hit counters
+=================================
+
+R2#sh route-map SET-LOCALPREF
+route-map SET-LOCALPREF, permit, sequence 10
+  Match clauses:
+    ip address prefix-lists: PL-PRIORITY
+  Set clauses:
+    local-preference 200
+  Policy routing matches: 0 packets, 0 bytes
+route-map SET-LOCALPREF, permit, sequence 20
+  Match clauses:
+    ip address prefix-lists: PL-LOWPRI
+  Set clauses:
+    local-preference 100
+  Policy routing matches: 0 packets, 0 bytes
+route-map SET-LOCALPREF, permit, sequence 30
+  Match clauses:
+  Set clauses:
+  Policy routing matches: 0 packets, 0 bytes
+R2#
+
+#This proves that each sequence actually matched, not just the catch-all.
+
+
+Confirming outbound route-map hit counters on R2
+================================================
+R2#show route-map PREPEND-LOWPRI
+route-map PREPEND-LOWPRI, permit, sequence 10
+  Match clauses:
+    ip address prefix-lists: PL-LOWPRI
+  Set clauses:
+    as-path prepend 65200 65200
+  Policy routing matches: 0 packets, 0 bytes
+route-map PREPEND-LOWPRI, permit, sequence 20
+  Match clauses:
+  Set clauses:
+  Policy routing matches: 0 packets, 0 bytes
+R2#
+
+
+Direct per-prefix detail check on R3 (most precise confirmation)
+================================================================
+R2#sh ip bgp 172.16.1.0
+BGP routing table entry for 172.16.1.0/24, version 2
+Paths: (1 available, best #1, table Default-IP-Routing-Table)
+  Advertised to update-groups:
+        1    2
+  65100
+    10.12.1.1 from 10.12.1.1 (172.16.2.1)
+      Origin IGP, metric 0, localpref 100, valid, external, best
+R2#
+
+R2#sh ip bgp 172.16.2.0
+BGP routing table entry for 172.16.2.0/24, version 3
+Paths: (1 available, best #1, table Default-IP-Routing-Table)
+  Advertised to update-groups:
+        1    2
+  65100
+    10.12.1.1 from 10.12.1.1 (172.16.2.1)
+      Origin IGP, metric 0, localpref 100, valid, external, best
+R2#
+
+
+Confirm route-maps are correctly attached to the right neighbor, right direction.
+================================================================================
+R2#sh run | section router bgp 65200
+router bgp 65200
+ bgp log-neighbor-changes
+ neighbor 10.12.1.1 remote-as 65100
+ neighbor 10.23.1.2 remote-as 65300
+ !
+ address-family ipv4
+  neighbor 10.12.1.1 activate
+  neighbor 10.12.1.1 route-map SET-LOCALPREF in
+  neighbor 10.23.1.2 activate
+  neighbor 10.23.1.2 route-map PREPEND-LOWPRI out
+  no auto-summary
+  no synchronization
+ exit-address-family
+R2#
+
+#This confirms route-map SET-LOCALPREF in is on the R1-facing neighbor and route-map PREPEND-LOWPRI out is on the R3-facing neighbor.

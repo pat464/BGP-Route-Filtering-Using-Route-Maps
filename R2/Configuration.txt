@@ -1,0 +1,71 @@
+Interface Configuration
+=======================
+R2(config)#int fa0/0
+R2(config-if)#ip add 10.12.1.2 255.255.255.252
+R2(config-if)#no shut
+R2(config-if)#
+*Mar  1 00:25:50.859: %LINK-3-UPDOWN: Interface FastEthernet0/0, changed state to up
+*Mar  1 00:25:51.859: %LINEPROTO-5-UPDOWN: Line protocol on Interface FastEthernet0/0, changed state to up
+R2(config-if)#int fa0/1
+R2(config-if)#ip add 10.23.1.1 255.255.255.252
+R2(config-if)#no shut
+R2(config-if)#
+*Mar  1 00:26:33.523: %LINK-3-UPDOWN: Interface FastEthernet0/1, changed state to up
+*Mar  1 00:26:34.523: %LINEPROTO-5-UPDOWN: Line protocol on Interface FastEthernet0/1, changed state to up
+R2(config-if)#
+
+
+#Apply prefix-lists to identify each network
+============================================
+R2(config)#ip prefix-list PL-PRIORITY seq 5 permit 172.16.1.0/24
+R2(config)#ip prefix-list PL-LOWPRI seq 5 permit 172.16.2.0/24
+R2(config)#
+
+
+#Apply Inbound route-map (from R1): set LOCAL_PREF per prefix
+=============================================================
+R2(config)#route-map SET-LOCALPREF permit 10
+#Seq 10: 172.16.1.0/24 gets LOCAL_PREF 200 (above default 100) — marks it preferred.
+R2(config-route-map)#match ip address prefix-list PL-PRIORITY
+R2(config-route-map)#set local-preference 200
+#Seq 20: 172.16.2.0/24 explicitly gets LOCAL_PREF 100 (default value, set for clarity).
+R2(config-route-map)#route-map SET-LOCALPREF permit 20
+R2(config-route-map)#match ip address prefix-list PL-LOWPRI
+R2(config-route-map)#set local-preference 100
+#Seq 30: catch-all, ensures nothing else is accidentally dropped.
+R2(config-route-map)#route-map SET-LOCALPREF permit 30
+R2(config-route-map)#
+
+
+#Apply Outbound route-map (to R3): AS-path prepend the lower-priority network
+=============================================================================
+
+#Seq 10: 172.16.2.0/24 gets AS 65200 prepended twice, artificially lengthening its AS_PATH as seen by R3 (and anything beyond R3) — makes it look like a longer, less attractive path without blocking it.
+#Seq 20: catch-all, passes 172.16.1.0/24 through unmodified.
+
+R2(config-route-map)#route-map PREPEND-LOWPRI permit 10
+R2(config-route-map)#match ip address prefix-list PL-LOWPRI
+R2(config-route-map)#set as-path prepend 65200 65200
+R2(config-route-map)#route-map PREPEND-LOWPRI permit 20
+R2(config-route-map)#
+
+
+Apply both route-maps to BGP
+============================
+R2(config)#router bgp 65200
+R2(config-router)#neighbor 10.12.1.1 remote-as 65100
+R2(config-router)#neighbor 10.23.1.
+*Mar  1 01:03:13.935: %BGP-5-ADJCHANGE: neighbor 10.12.1.1 Up
+% Incomplete command.
+
+R2(config-router)#neighbor 10.23.1.2 remote-as 65300
+R2(config-router)#address-family ipv4 unicast
+R2(config-router-af)#neighbor 10.12.1.1
+*Mar  1 01:04:19.783: %BGP-5-ADJCHANGE: neighbor 10.23.1.2 Up  a
+% Ambiguous command:  "neighbor 10.12.1.1 a"
+R2(config-router-af)#neighbor 10.12.1.1 activate
+R2(config-router-af)#neighbor 10.23.1.2 activate
+R2(config-router-af)#
+R2(config-router-af)#neighbor 10.12.1.1 route-map SET-LOCALPREF in
+R2(config-router-af)#neighbor 10.23.1.2 route-map PREPEND-LOWPRI out
+R2(config-router-af)#

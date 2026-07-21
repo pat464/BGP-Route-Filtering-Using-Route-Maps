@@ -1,0 +1,36 @@
+Interface Configuration
+=======================
+R1(config)#int fa0/0
+R1(config-if)#ip add 10.12.1.1 255.255.255.252
+R1(config-if)#no shut
+R1(config-if)#int l
+*Mar  1 00:21:05.075: %LINK-3-UPDOWN: Interface FastEthernet0/0, changed state to up
+*Mar  1 00:21:06.075: %LINEPROTO-5-UPDOWN: Line protocol on Interface FastEthernet0/0, changed state to up
+% Incomplete command.
+
+R1(config)#int l1
+R1(config-if)#
+*Mar  1 00:21:42.835: %LINEPROTO-5-UPDOWN: Line protocol on Interface Loopback1, changed state to up
+R1(config-if)#ip add 172.16.1.1 255.255.255.0
+R1(config-if)#int l2
+R1(config-if)#ip
+*Mar  1 00:22:42.179: %LINEPROTO-5-UPDOWN: Line protocol on Interface Loopback2, changed state to up
+% Incomplete command.
+
+R1(config-if)#ip add 172.16.2.1 255.255.255.0
+R1(config-if)#
+
+
+BGP Configuration
+=======================
+R1(config)#router bgp 65100
+R1(config-router)#neighbor 10.12.1.2 remote-as 65200
+R1(config-router)#address-family ipv4 unicast
+R1(config-router-af)#neighbor 10.12.1.2 activate
+R1(config-router-af)#network 172.16.1.0 mask 255.255.255.0
+R1(config-router-af)#network 172.16.2.0 mask 255.255.255.0
+R1(config-router-af)#
+
+#No route-map logic on R1.
+#R1 simply originates both networks with no policy applied.
+#Routing modifications only happens on R2.
