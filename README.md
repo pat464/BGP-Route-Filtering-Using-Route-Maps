@@ -9,8 +9,7 @@ A route map has four components:
 -Conditional matching criteria: Identifies prefix characteristics (the prefix itself, BGP 
 path attribute, next hop, and so on) for a specific sequence.
 -Processing action: Permits or denies the prefix.
--Optional action: Allows for manipulations, depending on how the route map is refer
-enced on the router. Actions can include modification, addition, or removal of route 
+-Optional action: Allows for manipulations, depending on how the route map is referenced on the router. Actions can include modification, addition, or removal of route 
 characteristics.
 ======================
 A route map uses the command syntax:
